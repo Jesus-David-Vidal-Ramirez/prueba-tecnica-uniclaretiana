@@ -1,0 +1,25 @@
+FROM php:8.4-fpm-alpine
+
+# Dependencias básicas
+RUN apk add --no-cache bash git npm freetype-dev libjpeg-turbo-dev libpng-dev libzip-dev icu-dev \
+    && docker-php-ext-install pdo pdo_mysql intl gd zip bcmath
+
+# Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www
+
+# RUN npm install
+# Solo instalar dependencias PHP (el código vendrá del volumen)
+COPY composer.json composer.lock ./
+#RUN composer instal
+
+# Instalar dependencias de Node.js
+COPY package.json package-lock.json ./
+
+# COPY entryPoint.sh /usr/local/bin/entryPoint.sh
+# RUN chmod +x /usr/local/bin/entryPoint.sh
+# ENTRYPOINT ["entryPoint.sh"]
+
+EXPOSE 8000 5173
+CMD ["sh", "-c", "php artisan serve --host=0.0.0.0 --port=8000 & npm run dev -- --host 0.0.0.0"]

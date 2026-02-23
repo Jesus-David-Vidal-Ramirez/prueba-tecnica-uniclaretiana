@@ -1,0 +1,54 @@
+# ---------- STAGE 1: Composer + NPM build ----------
+    FROM php:8.4-fpm-alpine AS builder
+
+    # Dependencias de compilación
+    RUN apk add --no-cache git npm libpng-dev libjpeg-turbo-dev freetype-dev icu-dev libzip-dev
+    
+    # Extensiones PHP necesarias
+    RUN docker-php-ext-install pdo pdo_mysql intl gd zip bcmath
+    
+    # Composer
+    COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+    
+    WORKDIR /app
+    
+    # Copiar archivos de composer y node para cachear dependencias
+    COPY composer.json composer.lock package.json package-lock.json ./
+    
+    # Instalar dependencias PHP (sin dev, optimizado)
+    RUN composer install --no-dev --optimize-autoloader
+    
+    # Instalar dependencias de Node y compilar assets
+    RUN npm install && npm run build
+    
+    # Copiar todo el proyecto
+    COPY . .
+    
+    # ---------- STAGE 2: Runtime ----------
+    FROM php:8.4-fpm-alpine AS runtime
+    
+    # Dependencias mínimas
+    RUN apk add --no-cache libpng libjpeg-turbo freetype icu libzip
+    
+    # Extensiones PHP necesarias
+    RUN docker-php-ext-install pdo pdo_mysql intl gd zip bcmath
+    
+    WORKDIR /var/www
+    
+    # Copiar desde el builder: vendor + assets compilados + código
+    COPY --from=builder /app/vendor ./vendor
+    COPY --from=builder /app/public ./public
+    COPY --from=builder /app/bootstrap ./bootstrap
+    COPY --from=builder /app/config ./config
+    COPY --from=builder /app/routes ./routes
+    COPY --from=builder /app/resources/views ./resources/views
+    COPY --from=builder /app/app ./app
+    COPY --from=builder /app/artisan ./artisan
+    
+    # Permisos
+    RUN chown -R www-data:www-data /var/www && chmod -R 755 /var/www
+    
+    EXPOSE 8000
+    
+    CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+    
